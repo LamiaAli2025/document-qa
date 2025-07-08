@@ -1,53 +1,56 @@
 import streamlit as st
-from openai import OpenAI
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Show title and description.
-st.title("📄 Document question answering")
+# Updated title and description
+st.title("✍️ Arabic Handwriting Extraction")
 st.write(
-    "Upload a document below and ask a question about it – GPT will answer! "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
+    "Upload an image containing Arabic handwriting – Gemini will extract the text! "
+    "Get your Google Gemini API key [here](https://aistudio.google.com/app/apikey)."
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# Get Gemini API key from user
+gemini_api_key = st.text_input("Gemini API Key", type="password")
+if not gemini_api_key:
+    st.info("Please add your Gemini API key to continue.", icon="🗝️")
+    st.stop()  # Stop execution if no key
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Configure Gemini with user-provided key
+genai.configure(api_key=gemini_api_key)
 
-    # Let the user upload a file via `st.file_uploader`.
-    uploaded_file = st.file_uploader(
-        "Upload a document (.txt or .md)", type=("txt", "md")
-    )
+# Image uploader (accepts PNG/JPEG)
+uploaded_file = st.file_uploader(
+    "Upload Handwriting Image",
+    type=["png", "jpg", "jpeg"],
+    help="Take a clear photo of handwritten Arabic text"
+)
 
-    # Ask the user for a question via `st.text_area`.
-    question = st.text_area(
-        "Now ask a question about the document!",
-        placeholder="Can you give me a short summary?",
-        disabled=not uploaded_file,
-    )
-
-    if uploaded_file and question:
-
-        # Process the uploaded file and question.
-        document = uploaded_file.read().decode()
-        messages = [
-            {
-                "role": "user",
-                "content": f"Here's a document: {document} \n\n---\n\n {question}",
-            }
-        ]
-
-        # Generate an answer using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
-
-        # Stream the response to the app using `st.write_stream`.
-        st.write_stream(stream)
+if uploaded_file:
+    # Display the uploaded image
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+    
+    # Process image when user clicks button
+    if st.button("Extract Text"):
+        # Read image bytes
+        image_bytes = uploaded_file.getvalue()
+        
+        # Initialize the vision model
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Create prompt for Arabic handwriting extraction
+        prompt = "Extract the Arabic handwriting text EXACTLY as written. Return only the raw text without any translations, explanations, or formatting."
+        
+        # Generate content
+        with st.spinner("Extracting handwriting..."):
+            try:
+                response = model.generate_content(
+                    contents=[prompt, {"mime_type": uploaded_file.type, "data": image_bytes}]
+                )
+                
+                # Display extracted text
+                st.subheader("Extracted Text")
+                st.write(response.text)
+                
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.info("Ensure your API key is valid and supports Gemini Vision")
